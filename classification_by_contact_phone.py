@@ -74,7 +74,7 @@ def remove_accents(input_str):
     return s
 
 
-def requestToString(data):
+def requestToString(data):  # use to convert the data gotten from get_from_api() to string
     stringRequest = ""
     for feature in data:
         new_feature = remove_accents(data[feature]).lower()
@@ -102,67 +102,78 @@ class Output:
     }
 
 
-with open('test_data_with_contact_phone.json', 'rb') as json_data:
+with open('data_1.json', 'rb') as json_data:
     data_set = json.loads(json_data.read())
     print(len(data_set), "datas loaded succesfully")
-    requestDict_for_contact_phone = {}  # store the id of posts have identical contact phone
 
+    requestDict_for_contact_phone = {}  # store the id of posts have identical contact phone
     for data in data_set:
-        content = get_from_api(data['content'])
-        data['content'] = requestToString(content)  # store content after get_from_api and requestToString into hash
         if (data['contact_phone']) is not None:
             key = hashMap(str(data['contact_phone']))
             if not requestDict_for_contact_phone.get(key):
                 requestDict_for_contact_phone[key] = []
-            data['contact_phone'] = ''  # It's unnecessary to store contact_phone in hash, just check it's null/not
-            requestDict_for_contact_phone[key].append(data)
+            requestDict_for_contact_phone[key].append(data['id'])
         else:
             key = hashMap('-1')
             if not requestDict_for_contact_phone.get(key):
                 requestDict_for_contact_phone[key] = []
-            requestDict_for_contact_phone[key].append(data)
+            requestDict_for_contact_phone[key].append(data['id'])
 
-    #print(requestDict_for_contact_phone)
+    # print(requestDict_for_contact_phone)
 
     for requestData in requestDict_for_contact_phone:
-        for data in requestDict_for_contact_phone[requestData]:
-            #print(data)
+        for data_id in requestDict_for_contact_phone[requestData]:
+            # print(data_id)
             output = Output()
-            output.result['id'] = data['id']
+            output.result['id'] = data_id
             if data['contact_phone'] is None:
-                output.result['agency'] = 'Not sure'    # because of no contact_phone
+                output.result['agency'] = 'Not sure because no contact phone'  # because of no contact_phone
                 # ghi file
                 with codecs.open('result2.json', 'a') as reader:
                     json.dump(output.result, reader)
             else:
-                if len(requestDict_for_contact_phone[requestData]) == 1:    # only 1 post => No agency
-                    output.result['agency'] = 'No'
+                if len(requestDict_for_contact_phone[requestData]) == 1:  # only 1 post => No agency
+                    output.result['agency'] = 'No because only 1 post'
                     # ghi file
                     with codecs.open('result2.json', 'a') as reader:
                         json.dump(output.result, reader)
-                elif len(requestDict_for_contact_phone[requestData]) > 20:   # more than 20 posts from the same number
-                    output.result['agency'] = 'Yes'
-                    print(data['id'])
+                elif len(requestDict_for_contact_phone[requestData]) > 20:  # more than 20 posts having the same phone
+                    output.result['agency'] = 'Yes because >20 post'
                     # ghi file
                     with codecs.open('result2.json', 'a') as reader:
                         json.dump(output.result, reader)
                 else:
                     conclusion = ''
-                    for another_data in requestDict_for_contact_phone[requestData]:
-                        if another_data['id'] == data['id']:
+                    requestDict_for_content = {}
+                    data_content = ''
+                    for data in data_set:
+                        if data['id'] == data_id:
+                            data_content = requestToString(get_from_api(data['content']))
+                            break
+                    content_key = hashMap(data_content)
+                    requestDict_for_content[content_key] = data_id
+                    for another_data_id in requestDict_for_contact_phone[requestData]:
+                        if another_data_id == data_id:
                             continue
-                        if another_data['content'] != data['content']:
-                            conclusion = 'Not sure'
-                            # this contact_phone has some posts (not too much) but the content of each is
+                        for data in data_set:
+                            if data['id'] == another_data_id:
+                                data_content = requestToString(get_from_api(data['content']))
+                                break
+                        content_key = hashMap(data_content)
+                        if not requestDict_for_content.get(content_key):
+                            conclusion = 'Not sure because < 20post and diff content'
+                            # this contact_phone has < 20 posts (not too much) but the content of each is
                             # different => Not sure because this case is not in rule
                             break
                     if conclusion == '':
-                        conclusion = 'No'   # post more than 1 with the same content => No agency
-                    # print for another post having the same number
-                    for another_data in requestDict_for_contact_phone[requestData]:
-                        output.result['id'] = another_data['id']
+                        conclusion = 'No because >1 post same content'
+                        # more than 1 post with the same content => No agency
+
+                    # ghi file for all posts in this case
+                    for another_data_id in requestDict_for_contact_phone[requestData]:
+                        output.result['id'] = another_data_id
                         output.result['agency'] = conclusion
-                        # ghi file
                         with codecs.open('result2.json', 'a') as reader:
                             json.dump(output.result, reader)
                     break
+    print('Done')
